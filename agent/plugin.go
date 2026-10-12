@@ -11,7 +11,7 @@ import (
 
 // Plugin packages tools, prompt fragments and hooks. Capabilities are
 // discovered by type assertion against ToolProvider, PromptProvider,
-// ModelHook, ToolHook and FinishHook. Hooks run in plugin registration order.
+// ModelHook, ToolHook, MessageHook and FinishHook. Hooks run in plugin registration order.
 type Plugin interface {
 	Name() string
 	// Init is called once by New, in registration order, before any
@@ -51,6 +51,16 @@ type ModelHook interface {
 type ToolHook interface {
 	BeforeTool(ctx context.Context, call *llm.ToolCall) (Decision, error)
 	AfterTool(ctx context.Context, call llm.ToolCall, result *llm.ToolResult) error
+}
+
+// MessageHook observes every message a run appends to the history, in order:
+// each assistant response (after AfterModel hooks) and each batch of tool
+// results (after AfterTool hooks, including results backfilled when the run
+// is interrupted). Input messages passed to Run are not reported. It receives
+// a context that is not canceled with the run's context, so it can persist
+// the backfilled results of a canceled run. A returned error aborts the run.
+type MessageHook interface {
+	OnMessage(ctx context.Context, msg llm.Message) error
 }
 
 // FinishHook is notified exactly once when a run ends, whatever the outcome.
