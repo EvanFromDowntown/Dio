@@ -112,6 +112,18 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Errorf("truncated stream: err=%v closed=%v", err, closed)
 	}
 
+	finishOnEOF := NewStreamWithEOF(io.NopCloser(strings.NewReader("event: two\ndata: x\n\n")), decode,
+		func() ([]llm.StreamEvent, bool, error) {
+			return []llm.StreamEvent{{Type: llm.EventDone}}, true, nil
+		})
+	n := 0
+	for finishOnEOF.Next() {
+		n++
+	}
+	if finishOnEOF.Err() != nil || n != 3 {
+		t.Errorf("EOF completion: events=%d err=%v", n, finishOnEOF.Err())
+	}
+
 	got, err, _ = run("event: two\ndata: x\n\nevent: fail\ndata: x\n\n")
 	if err == nil || err.Error() != "fail" || len(got) != 2 {
 		t.Errorf("failing stream: events=%v err=%v", got, err)
