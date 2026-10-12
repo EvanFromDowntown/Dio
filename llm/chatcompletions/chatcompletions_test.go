@@ -371,7 +371,10 @@ func TestStreamErrors(t *testing.T) {
 	}{
 		{"error chunk", `data: {"id":"c","choices":[{"index":0,"delta":{"content":"a"}}]}` + "\n\n" +
 			`data: {"error":{"message":"overloaded","type":"server_error"}}` + "\n\n",
-			func(err error) bool { var e *llm.APIError; return errors.As(err, &e) && e.Message == "overloaded" && e.Retryable() }},
+			func(err error) bool {
+				var e *llm.APIError
+				return errors.As(err, &e) && e.Message == "overloaded" && e.Retryable()
+			}},
 		{"truncated", `data: {"id":"c","choices":[{"index":0,"delta":{"content":"a"}}]}` + "\n\n",
 			func(err error) bool { return errors.Is(err, llm.ErrIncompleteStream) }},
 		{"malformed", "data: {nope\n\n", func(err error) bool { return err != nil && strings.Contains(err.Error(), "decode") }},
