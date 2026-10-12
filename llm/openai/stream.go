@@ -111,7 +111,7 @@ func (d *streamDecoder) decode(ev sse.Event) ([]llm.StreamEvent, bool, error) {
 		}
 		return []llm.StreamEvent{{Type: llm.EventReasoningDelta, Index: idx, Delta: "\n\n"}}, false, nil
 
-	case "response.reasoning_summary_text.delta":
+	case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
 		idx, ok := d.items[p.OutputIndex]
 		if !ok {
 			return nil, false, nil

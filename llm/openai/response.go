@@ -131,10 +131,19 @@ func convertOutputItem(item outputItem) []llm.ContentBlock {
 	return nil
 }
 
+// reasoningBlock prefers the summary; open-weight models served through the
+// Responses API put raw reasoning in content parts instead.
 func reasoningBlock(item outputItem) llm.ContentBlock {
 	parts := make([]string, 0, len(item.Summary))
 	for _, s := range item.Summary {
 		parts = append(parts, s.Text)
+	}
+	if len(parts) == 0 {
+		for _, c := range item.Content {
+			if c.Type == "reasoning_text" || c.Type == "output_text" {
+				parts = append(parts, c.Text)
+			}
+		}
 	}
 	return llm.ContentBlock{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{
 		Provider:  ProviderName,

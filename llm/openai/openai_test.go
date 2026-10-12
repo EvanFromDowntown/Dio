@@ -183,6 +183,39 @@ func TestGenerateResponseParsing(t *testing.T) {
 	}
 }
 
+// Gateways serving open-weight models return raw reasoning as content parts
+// (output_text when non-streaming, reasoning_text when streaming) with an
+// empty summary.
+func TestReasoningContentParts(t *testing.T) {
+	var r apiResponse
+	json.Unmarshal([]byte(`{"status":"completed","output":[
+		{"type":"reasoning","id":"rs_-1","status":"completed","role":"assistant","content":[{"type":"output_text","text":"think","annotations":[]}]},
+		{"type":"message","id":"m","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}`), &r)
+	resp, err := convertResponse(&r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resp.Content[0].Reasoning; got == nil || got.Text != "think" || got.ID != "rs_-1" {
+		t.Errorf("reasoning = %+v", got)
+	}
+
+	srv, _ := newServer(t, 200, "text/event-stream", "data: "+strings.Join([]string{
+		`{"type":"response.output_item.added","output_index":0,"item":{"summary":[],"id":"msg_r","type":"reasoning","content":[]}}`,
+		`{"type":"response.reasoning_text.delta","delta":"User","output_index":0,"content_index":0,"item_id":"msg_r"}`,
+		`{"type":"response.output_item.done","output_index":0,"item":{"summary":[],"id":"msg_r","type":"reasoning","content":[{"type":"reasoning_text","text":"User asks"}]}}`,
+		`{"type":"response.completed","response":{"id":"r","status":"completed","output":[{"id":"msg_r","summary":[],"type":"reasoning","content":[{"text":"User asks","type":"reasoning_text"}]}]}}`,
+	}, "\n\ndata: ")+"\n\n")
+	s, err := newClient(srv).Stream(context.Background(), &llm.Request{Model: "m", Messages: []llm.Message{llm.UserText("x")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := collectEvents(t, s)
+	if events[1].Type != llm.EventReasoningDelta || events[1].Delta != "User" ||
+		events[2].Block.Reasoning.Text != "User asks" || events[3].Response.Content[0].Reasoning.Text != "User asks" {
+		t.Errorf("events = %s", testutil.Pretty(events))
+	}
+}
+
 func TestStopReasons(t *testing.T) {
 	tests := []struct {
 		body string
