@@ -9,6 +9,7 @@ Dio 是一个用 Go 编写的 agent，仅依赖标准库。目前包含：
 
 ```
 agent/                Agent loop、Plugin / Host 接口与可选能力接口、Decision
+session/              会话持久化：Store 接口、JSONL 文件存储、内存存储、Recorder 插件、Runner
 tool/                 Tool 接口、tool.Func 适配器、Registry
 plugins/readfile/     示例插件：只读 read_file 工具 + 记录日志的 hook
 examples/readfile/    使用示例插件的命令行 demo
@@ -137,6 +138,7 @@ for ev, err := range a.Stream(ctx, msgs) {
 | `PromptProvider` | 提供 system prompt 片段 |
 | `ModelHook` | 修改请求、修改响应 |
 | `ToolHook` | 放行、拒绝或改写工具调用，改写工具结果 |
+| `MessageHook` | 每条追加到历史的消息（模型响应、工具结果批次）都会经过它 |
 | `FinishHook` | 运行结束时收到通知（无论成功与否） |
 
 - hook 按插件注册顺序执行。`BeforeTool` 返回 `agent.Deny(reason)` 时，拒绝原因作为错误结果返回给模型，后续 `BeforeTool` 不再执行；`agent.ModifyArguments(args)` 会改写参数，后面的 hook 和工具都会看到改写后的参数。
@@ -151,6 +153,33 @@ OPENAI_API_KEY=... go run ./examples/readfile -model gpt-5 "Summarize README.md"
 # 兼容 Chat Completions 协议的网关，key 从指定的环境变量读取
 DIO_API_KEY=... go run ./examples/readfile -provider chatcompletions -api-key-env DIO_API_KEY \
   -base-url https://gateway.example.com/v1 -model deepseek-flash "Summarize README.md"
+```
+
+## Session
+
+一次对话可以跨多次运行持久化、列出和恢复：
+
+```go
+store, _ := session.NewFileStore(dir) // 默认目录用 session.DefaultDir()：~/.dio/sessions
+a, _ := agent.New(ctx, agent.Config{ /* ... */ Plugins: []agent.Plugin{files, session.NewRecorder(store)}})
+runner := session.Runner{Agent: a, Store: store}
+
+sess, _ := store.Create(ctx, session.Info{Provider: "openai", Model: "gpt-5"})
+runner.Run(ctx, sess.ID, llm.UserText("Remember: the code is 4729."))
+runner.Run(ctx, sess.ID, llm.UserText("What was the code?")) // 自动带上完整历史
+runner.Run(ctx, sess.ID)                                      // 中断后不带新输入直接续跑
+```
+
+- `Recorder` 是一个插件：通过 `MessageHook` 增量写入每条新消息，通过 `AfterModel` 写入每次响应的 usage。它写入的是 context 里携带的 session（`session.NewContext`），所以同一个 agent 可以服务多个 session。
+- `Runner` 负责加载历史、先落盘新输入、补齐崩溃遗留的未完成工具调用，然后运行 agent。
+- 每个 session 存成一个 `<id>.jsonl` 文件：第一行是 `session` 头（版本、ID、provider、model、metadata），后面每行是一条追加记录（`message` / `usage` / `title`）。每次追加都是一次完整的整行写入；崩溃留下的半行在读取时会被忽略，下次追加时会被截掉。
+
+示例程序：
+
+```bash
+go run ./examples/readfile -model gpt-5 "Remember: the code is 4729."   # 默认新建，stderr 打印 session ID
+go run ./examples/readfile -model gpt-5 -session <id> "What was the code?"
+go run ./examples/readfile sessions                                     # 列出 session
 ```
 
 ## 开发
