@@ -45,13 +45,14 @@ type Config struct {
 }
 
 type Agent struct {
-	cfg         Config
-	logger      *slog.Logger
-	tools       *tool.Registry
-	prompts     []PromptProvider
-	modelHooks  []ModelHook
-	toolHooks   []ToolHook
-	finishHooks []FinishHook
+	cfg          Config
+	logger       *slog.Logger
+	tools        *tool.Registry
+	prompts      []PromptProvider
+	modelHooks   []ModelHook
+	toolHooks    []ToolHook
+	messageHooks []MessageHook
+	finishHooks  []FinishHook
 }
 
 type host struct{ logger *slog.Logger }
@@ -106,6 +107,9 @@ func New(ctx context.Context, cfg Config) (*Agent, error) {
 		}
 		if h, ok := p.(ToolHook); ok {
 			a.toolHooks = append(a.toolHooks, h)
+		}
+		if h, ok := p.(MessageHook); ok {
+			a.messageHooks = append(a.messageHooks, h)
 		}
 		if h, ok := p.(FinishHook); ok {
 			a.finishHooks = append(a.finishHooks, h)
@@ -249,7 +253,9 @@ func (a *Agent) run(ctx context.Context, input []llm.Message, emit emitFunc) (re
 		}
 		res.Response = resp
 		addUsage(&res.Usage, resp.Usage)
-		res.Messages = append(res.Messages, resp.Message())
+		if err := a.appendMessage(ctx, res, resp.Message()); err != nil {
+			return res, err
+		}
 		if err := send(Event{Type: EventModelResponse, Turn: turn, Response: resp}); err != nil {
 			return res, err
 		}
@@ -259,11 +265,26 @@ func (a *Agent) run(ctx context.Context, input []llm.Message, emit emitFunc) (re
 			return res, nil
 		}
 		results, err := a.runTools(ctx, turn, calls, send)
-		res.Messages = append(res.Messages, llm.ToolResults(results...))
+		if herr := a.appendMessage(ctx, res, llm.ToolResults(results...)); err == nil {
+			err = herr
+		}
 		if err != nil {
 			return res, err
 		}
 	}
+}
+
+// appendMessage is the only place the run grows the history, so MessageHooks
+// see exactly what a follow-up run will receive.
+func (a *Agent) appendMessage(ctx context.Context, res *Result, msg llm.Message) error {
+	res.Messages = append(res.Messages, msg)
+	hookCtx := context.WithoutCancel(ctx)
+	for _, h := range a.messageHooks {
+		if err := h.OnMessage(hookCtx, msg); err != nil {
+			return fmt.Errorf("agent: OnMessage hook: %w", err)
+		}
+	}
+	return nil
 }
 
 // runTools executes calls sequentially. It always returns one result per
