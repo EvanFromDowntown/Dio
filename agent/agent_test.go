@@ -501,6 +501,76 @@ func TestStreamConsumerStops(t *testing.T) {
 	}
 }
 
+type messageLog struct {
+	msgs   []llm.Message
+	ctxErr []error
+	err    error
+}
+
+func (m *messageLog) Name() string                     { return "messages" }
+func (m *messageLog) Init(context.Context, Host) error { return nil }
+func (m *messageLog) OnMessage(ctx context.Context, msg llm.Message) error {
+	m.msgs = append(m.msgs, msg)
+	m.ctxErr = append(m.ctxErr, ctx.Err())
+	return m.err
+}
+
+func TestMessageHook(t *testing.T) {
+	t.Run("sees exactly the appended history", func(t *testing.T) {
+		log := &messageLog{}
+		rewrite := &hookPlugin{name: "rewrite", afterTool: func(_ llm.ToolCall, r *llm.ToolResult) error {
+			r.Content = "rewritten"
+			return nil
+		}}
+		client := newFake(reply(toolResp(call("c1", "echo", `{"text":"a"}`))), reply(textResp("done")))
+		a := newAgent(t, client, Config{Tools: []tool.Tool{echoTool()}, Plugins: []Plugin{log, rewrite}})
+		input := []llm.Message{llm.UserText("go")}
+		res, err := a.Run(context.Background(), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(append(input, log.msgs...), res.Messages) {
+			t.Errorf("hook messages %+v\nhistory %+v", log.msgs, res.Messages)
+		}
+		if toolResultsOf(log.msgs[1])[0].Content != "rewritten" {
+			t.Errorf("hook saw results before AfterTool: %+v", log.msgs[1])
+		}
+	})
+
+	t.Run("receives backfilled results with a live context after cancel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		log := &messageLog{}
+		stop := toolDef{name: "stop", fn: func(context.Context, json.RawMessage) (string, error) {
+			cancel()
+			return "stopped", nil
+		}}
+		client := newFake(reply(toolResp(call("c1", "stop", `{}`), call("c2", "stop", `{}`))))
+		a := newAgent(t, client, Config{Plugins: []Plugin{log, &hookPlugin{name: "p", tools: []toolDef{stop}}}})
+		_, err := a.Run(ctx, []llm.Message{llm.UserText("go")})
+		if !errors.Is(err, context.Canceled) || len(log.msgs) != 2 {
+			t.Fatalf("err=%v msgs=%d", err, len(log.msgs))
+		}
+		results := toolResultsOf(log.msgs[1])
+		if len(results) != 2 || results[0].Content != "stopped" || !strings.Contains(results[1].Content, "interrupted") {
+			t.Errorf("results = %+v", results)
+		}
+		if log.ctxErr[1] != nil {
+			t.Errorf("hook context canceled: %v", log.ctxErr[1])
+		}
+	})
+
+	t.Run("error aborts the run", func(t *testing.T) {
+		log := &messageLog{err: errors.New("disk full")}
+		client := newFake(reply(toolResp(call("c1", "echo", `{}`))), reply(textResp("unreachable")))
+		a := newAgent(t, client, Config{Tools: []tool.Tool{echoTool()}, Plugins: []Plugin{log}})
+		res, err := a.Run(context.Background(), []llm.Message{llm.UserText("go")})
+		if err == nil || !strings.Contains(err.Error(), "disk full") || res.FinishReason != FinishError || client.calls() != 1 {
+			t.Errorf("err=%v reason=%s calls=%d", err, res.FinishReason, client.calls())
+		}
+	})
+}
+
 func TestNew(t *testing.T) {
 	ctx := context.Background()
 	client := newFake()
