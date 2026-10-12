@@ -1,10 +1,17 @@
 # Dio
 
-Dio 是一个用 Go 编写的 agent。当前已完成 LLM 调用层：一套与提供方无关的接口，以及 OpenAI Responses API 和 Anthropic Messages API 两个适配器。仅依赖标准库。
+Dio 是一个用 Go 编写的 agent，仅依赖标准库。目前包含：
+
+- LLM 调用层：一套与提供方无关的接口，以及 OpenAI Responses API 和 Anthropic Messages API 两个适配器。
+- Agent loop：能力 tool 化、约束 hook 化、插件只负责打包。
 
 ## 目录结构
 
 ```
+agent/                Agent loop、Plugin / Host 接口与可选能力接口、Decision
+tool/                 Tool 接口、tool.Func 适配器、Registry
+plugins/readfile/     示例插件：只读 read_file 工具 + 记录日志的 hook
+examples/readfile/    使用示例插件的命令行 demo
 llm/                  与提供方无关的类型与接口
   client.go           Client / Stream 接口、StreamEvent、Collect
   message.go          Role、Message、ContentBlock（文本/图片/工具调用/工具结果/推理）
@@ -88,6 +95,56 @@ for {
 - Anthropic 适配器支持 `WithAPIKey`（`x-api-key`）和 `WithAuthToken`（`Authorization: Bearer`，部分网关需要）；`WithHeader` 可追加任意请求头（如 `anthropic-beta`）。
 - `Request.Extra` 会合并到请求体顶层，用于传递提供方或网关的专有参数（如 OpenAI 的 `store`、`include`）。
 - 错误统一为 `*llm.APIError`，可以用 `llm.IsRetryable(err)` 判断是否值得重试（429、5xx、overloaded 等）。
+
+## Agent loop
+
+一般不需要手写上面的循环，用 `agent` 包即可：
+
+```go
+files := readfile.New(".")
+defer files.Close()
+
+a, err := agent.New(ctx, agent.Config{
+	Client:   client,
+	Model:    "gpt-5",
+	System:   "You are a concise assistant.",
+	MaxTurns: 10,
+	Plugins:  []agent.Plugin{files},
+})
+
+// 非流式
+res, err := a.Run(ctx, []llm.Message{llm.UserText("Summarize README.md")})
+fmt.Println(res.Text(), res.FinishReason, res.Usage)
+
+// 流式：最后一个事件总是 EventDone，err 为本次运行的错误
+for ev, err := range a.Stream(ctx, msgs) {
+	if ev.Type == agent.EventModel && ev.LLM.Type == llm.EventTextDelta {
+		fmt.Print(ev.LLM.Delta)
+	}
+}
+```
+
+每一轮的流程：组装 system prompt（`Config.System` 加上各插件的 `SystemPrompt` 片段）→ `BeforeModel` → 调用模型 → `AfterModel` → 没有工具调用就结束；否则对每个调用依次执行 `BeforeTool` → 执行工具 → `AfterTool`，把结果追加到历史后进入下一轮。
+
+插件实现 `Plugin`（`Name`、`Init`），再按需实现可选能力接口，agent 通过类型断言发现它们：
+
+| 接口 | 作用 |
+| --- | --- |
+| `ToolProvider` | 提供工具 |
+| `PromptProvider` | 提供 system prompt 片段 |
+| `ModelHook` | 修改请求、修改响应 |
+| `ToolHook` | 放行、拒绝或改写工具调用，改写工具结果 |
+| `FinishHook` | 运行结束时收到通知（无论成功与否） |
+
+- hook 按插件注册顺序执行。`BeforeTool` 返回 `agent.Deny(reason)` 时，拒绝原因作为错误结果返回给模型，后续 `BeforeTool` 不再执行；`agent.ModifyArguments(args)` 会改写参数，后面的 hook 和工具都会看到改写后的参数。
+- 工具返回错误、调用不存在的工具、工具 panic，都会作为错误结果回传给模型，循环继续；hook 返回 error 则中止运行。
+- 运行中断时（取消、hook 出错、达到 `MaxTurns`），已请求但没有结果的工具调用会补上错误结果，`Result.Messages` 可以直接用于下一次 `Run`。
+
+示例：
+
+```bash
+OPENAI_API_KEY=... go run ./examples/readfile -model gpt-5 "Summarize README.md"
+```
 
 ## 开发
 
