@@ -48,6 +48,9 @@ func (p *Plugin) Init(_ context.Context, host agent.Host) error {
 	if p.MaxBytes <= 0 {
 		p.MaxBytes = DefaultMaxBytes
 	}
+	if p.root != nil {
+		p.root.Close()
+	}
 	p.root, p.logger = root, host.Logger()
 	return nil
 }
