@@ -2,7 +2,7 @@
 
 Dio 是一个用 Go 编写的 agent，仅依赖标准库。目前包含：
 
-- LLM 调用层：一套与提供方无关的接口，以及 OpenAI Responses API 和 Anthropic Messages API 两个适配器。
+- LLM 调用层：一套与提供方无关的接口，以及 OpenAI Responses API、OpenAI Chat Completions API 和 Anthropic Messages API 三个适配器。
 - Agent loop：能力 tool 化、约束 hook 化、插件只负责打包。
 
 ## 目录结构
@@ -19,6 +19,7 @@ llm/                  与提供方无关的类型与接口
   request.go          Request、Response、Usage、StopReason
   errors.go           APIError（状态码、类型、Retry-After、Retryable）
   openai/             OpenAI Responses API 适配器（POST {baseURL}/responses）
+  chatcompletions/    OpenAI Chat Completions API 适配器（POST {baseURL}/chat/completions）
   anthropic/          Anthropic Messages API 适配器（POST {baseURL}/v1/messages）
 internal/
   sse/                text/event-stream 解析器
@@ -93,7 +94,9 @@ for {
 
 - `WithBaseURL` 沿用各官方 SDK 的习惯：OpenAI 的 base URL 包含 `/v1`，Anthropic 的不包含。
 - Anthropic 适配器支持 `WithAPIKey`（`x-api-key`）和 `WithAuthToken`（`Authorization: Bearer`，部分网关需要）；`WithHeader` 可追加任意请求头（如 `anthropic-beta`）。
-- `Request.Extra` 会合并到请求体顶层，用于传递提供方或网关的专有参数（如 OpenAI 的 `store`、`include`）。
+- `Request.Extra` 会合并到请求体顶层，用于传递提供方或网关的专有参数（如 OpenAI 的 `store`、`include`，Chat Completions 的 `response_format`）。
+- Chat Completions 适配器：`MaxTokens` 默认以 `max_completion_tokens` 发送（可用 `WithMaxTokensField("max_tokens")` 改）；`Reasoning.Effort` 映射为 `reasoning_effort`；推理内容读写 `reasoning_content`（DeepSeek 等模型的约定，可用 `WithReasoningReplay(false)` 关闭回放）；流式默认带 `stream_options.include_usage`。该协议没有工具错误标记，`IsError` 的工具结果会加上 `Error: ` 前缀。
+- 推理模型的推理 token 也计入输出上限，上限太小时可能只有推理、没有正文（`StopMaxTokens`）。
 - 错误统一为 `*llm.APIError`，可以用 `llm.IsRetryable(err)` 判断是否值得重试（429、5xx、overloaded 等）。
 
 ## Agent loop
@@ -144,6 +147,10 @@ for ev, err := range a.Stream(ctx, msgs) {
 
 ```bash
 OPENAI_API_KEY=... go run ./examples/readfile -model gpt-5 "Summarize README.md"
+
+# 兼容 Chat Completions 协议的网关，key 从指定的环境变量读取
+DIO_API_KEY=... go run ./examples/readfile -provider chatcompletions -api-key-env DIO_API_KEY \
+  -base-url https://gateway.example.com/v1 -model deepseek-flash "Summarize README.md"
 ```
 
 ## 开发

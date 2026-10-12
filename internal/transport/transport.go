@@ -142,13 +142,22 @@ type DecodeFunc func(ev sse.Event) (events []llm.StreamEvent, done bool, err err
 
 // NewStream adapts an SSE body to llm.Stream.
 func NewStream(body io.ReadCloser, decode DecodeFunc) llm.Stream {
-	return &stream{body: body, r: sse.NewReader(body), decode: decode}
+	return NewStreamWithEOF(body, decode, nil)
+}
+
+// EOFFunc is called when the body ends before a terminal event. It may
+// complete the stream; returning done=false reports llm.ErrIncompleteStream.
+type EOFFunc func() (events []llm.StreamEvent, done bool, err error)
+
+func NewStreamWithEOF(body io.ReadCloser, decode DecodeFunc, onEOF EOFFunc) llm.Stream {
+	return &stream{body: body, r: sse.NewReader(body), decode: decode, onEOF: onEOF}
 }
 
 type stream struct {
 	body   io.ReadCloser
 	r      *sse.Reader
 	decode DecodeFunc
+	onEOF  EOFFunc
 
 	queue    []llm.StreamEvent
 	cur      llm.StreamEvent
@@ -163,16 +172,23 @@ func (s *stream) Next() bool {
 			s.Close()
 			return false
 		}
+		var (
+			events []llm.StreamEvent
+			done   bool
+		)
 		ev, err := s.r.Next()
-		if errors.Is(err, io.EOF) {
-			s.err = llm.ErrIncompleteStream
-			continue
+		switch {
+		case errors.Is(err, io.EOF):
+			err = nil
+			if s.onEOF != nil {
+				events, done, err = s.onEOF()
+			}
+			if err == nil && !done {
+				err = llm.ErrIncompleteStream
+			}
+		case err == nil:
+			events, done, err = s.decode(ev)
 		}
-		if err != nil {
-			s.err = err
-			continue
-		}
-		events, done, err := s.decode(ev)
 		if err != nil {
 			s.err = err
 			continue
