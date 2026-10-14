@@ -33,6 +33,7 @@ func (s *MemoryStore) Create(_ context.Context, info Info) (*Session, error) {
 		return nil, err
 	}
 	info.CreatedAt, info.UpdatedAt = now, now
+	info.Provider = llm.NormalizeProvider(info.Provider)
 	info.MessageCount, info.Usage = 0, llm.Usage{}
 	line, err := encodeLines([]record{headerRecord(info)})
 	if err != nil {

@@ -1,4 +1,4 @@
-package openai
+package responses
 
 import (
 	"context"
@@ -451,5 +451,24 @@ func TestStreamErrors(t *testing.T) {
 				t.Errorf("err = %v", err)
 			}
 		})
+	}
+}
+
+func TestLegacyReasoningProviderIsReplayed(t *testing.T) {
+	if ProviderName != "openai/responses" {
+		t.Fatalf("ProviderName = %q", ProviderName)
+	}
+	body, err := encodeRequest(&llm.Request{Model: "m", Messages: []llm.Message{
+		llm.UserText("q"),
+		{Role: llm.RoleAssistant, Content: []llm.ContentBlock{
+			{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{Provider: "openai", ID: "rs_old", Text: "legacy"}},
+			{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{Provider: "chatcompletions", ID: "rs_x", Text: "foreign"}},
+		}},
+	}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"id":"rs_old"`) || strings.Contains(string(body), "rs_x") {
+		t.Errorf("body = %s", body)
 	}
 }

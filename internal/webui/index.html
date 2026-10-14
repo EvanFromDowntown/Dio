@@ -166,7 +166,7 @@ async function loadSessions() {
     const tokens = s.usage.input_tokens + s.usage.output_tokens;
     li.append(el("div", "meta", `${fmtTime(s.updated_at)} · ${s.message_count} 条 · ${tokens} tokens`));
     li.append(el("div", "meta", s.id));
-    li.title = `${s.provider}/${s.model}`;
+    li.title = `${s.provider} · ${s.model}`;
     li.onclick = () => openSession(s.id);
     list.append(li);
   }

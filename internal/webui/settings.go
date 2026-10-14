@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/EvanFromDowntown/Dio/internal/cli"
+	"github.com/EvanFromDowntown/Dio/llm"
 )
 
 // Settings are the user-adjustable run parameters. The API key is kept
@@ -41,7 +41,8 @@ func (s *Settings) normalize() error {
 	if s.Provider == "" {
 		s.Provider = cli.DefaultProvider
 	}
-	if !slices.Contains(cli.Providers, s.Provider) {
+	s.Provider = llm.NormalizeProvider(s.Provider)
+	if !llm.IsProvider(s.Provider) {
 		return fmt.Errorf("未知的 provider %q，可选：%s", s.Provider, strings.Join(cli.Providers, "、"))
 	}
 	switch s.ReasoningEffort {

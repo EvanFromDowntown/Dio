@@ -1,6 +1,6 @@
-// Package openai implements llm.Client over the OpenAI Responses API
+// Package responses implements llm.Client over the OpenAI Responses API
 // (POST {baseURL}/responses).
-package openai
+package responses
 
 import (
 	"context"
@@ -18,7 +18,7 @@ const (
 	// OPENAI_BASE_URL convention.
 	DefaultBaseURL = "https://api.openai.com/v1"
 	// ProviderName tags llm.Reasoning blocks produced by this adapter.
-	ProviderName = "openai"
+	ProviderName = llm.ProviderResponses
 )
 
 type Client struct {

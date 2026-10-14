@@ -2,8 +2,8 @@
 // recorded as a session that can be resumed.
 //
 //	OPENAI_API_KEY=... go run ./examples/readfile -model gpt-5 "Summarize README.md"
-//	ANTHROPIC_API_KEY=... go run ./examples/readfile -provider anthropic -model claude-sonnet-4-5 "Summarize README.md"
-//	DIO_API_KEY=... go run ./examples/readfile -provider chatcompletions -api-key-env DIO_API_KEY \
+//	ANTHROPIC_API_KEY=... go run ./examples/readfile -provider anthropic/messages -model claude-sonnet-4-5 "Summarize README.md"
+//	DIO_API_KEY=... go run ./examples/readfile -provider openai/chat-completions -api-key-env DIO_API_KEY \
 //		-base-url https://gateway.example.com/v1 -model deepseek-flash "Summarize README.md"
 //
 //	go run ./examples/readfile -model gpt-5 -session 20261012-091500-a1b2c3 "And the next section?"
@@ -24,17 +24,17 @@ import (
 
 	"github.com/EvanFromDowntown/Dio/agent"
 	"github.com/EvanFromDowntown/Dio/llm"
-	"github.com/EvanFromDowntown/Dio/llm/anthropic"
-	"github.com/EvanFromDowntown/Dio/llm/chatcompletions"
-	"github.com/EvanFromDowntown/Dio/llm/openai"
+	"github.com/EvanFromDowntown/Dio/llm/anthropic/messages"
+	"github.com/EvanFromDowntown/Dio/llm/openai/chatcompletions"
+	"github.com/EvanFromDowntown/Dio/llm/openai/responses"
 	"github.com/EvanFromDowntown/Dio/plugins/readfile"
 	"github.com/EvanFromDowntown/Dio/session"
 )
 
 var defaultKeyEnv = map[string]string{
-	"openai":          "OPENAI_API_KEY",
-	"chatcompletions": "OPENAI_API_KEY",
-	"anthropic":       "ANTHROPIC_API_KEY",
+	llm.ProviderResponses:       "OPENAI_API_KEY",
+	llm.ProviderChatCompletions: "OPENAI_API_KEY",
+	llm.ProviderMessages:        "ANTHROPIC_API_KEY",
 }
 
 type options struct {
@@ -54,7 +54,7 @@ func main() {
 	}
 
 	var o options
-	flag.StringVar(&o.provider, "provider", "openai", "openai (Responses), chatcompletions, or anthropic (Messages)")
+	flag.StringVar(&o.provider, "provider", llm.ProviderResponses, "provider ID: "+strings.Join(llm.Providers, ", "))
 	flag.StringVar(&o.model, "model", "", "model name (required)")
 	flag.StringVar(&o.baseURL, "base-url", "", "override the provider base URL")
 	flag.StringVar(&o.keyEnv, "api-key-env", "", "environment variable holding the API key (default depends on -provider)")
@@ -117,30 +117,31 @@ func listSessions(args []string) error {
 }
 
 func newClient(o options) (llm.Client, error) {
+	provider := llm.NormalizeProvider(o.provider)
 	keyEnv := o.keyEnv
 	if keyEnv == "" {
-		keyEnv = defaultKeyEnv[o.provider]
+		keyEnv = defaultKeyEnv[provider]
 	}
 	key := os.Getenv(keyEnv)
-	switch o.provider {
-	case "openai":
-		opts := []openai.Option{openai.WithAPIKey(key)}
+	switch provider {
+	case llm.ProviderResponses:
+		opts := []responses.Option{responses.WithAPIKey(key)}
 		if o.baseURL != "" {
-			opts = append(opts, openai.WithBaseURL(o.baseURL))
+			opts = append(opts, responses.WithBaseURL(o.baseURL))
 		}
-		return openai.New(opts...), nil
-	case "chatcompletions":
+		return responses.New(opts...), nil
+	case llm.ProviderChatCompletions:
 		opts := []chatcompletions.Option{chatcompletions.WithAPIKey(key)}
 		if o.baseURL != "" {
 			opts = append(opts, chatcompletions.WithBaseURL(o.baseURL))
 		}
 		return chatcompletions.New(opts...), nil
-	case "anthropic":
-		opts := []anthropic.Option{anthropic.WithAPIKey(key)}
+	case llm.ProviderMessages:
+		opts := []messages.Option{messages.WithAPIKey(key)}
 		if o.baseURL != "" {
-			opts = append(opts, anthropic.WithBaseURL(o.baseURL))
+			opts = append(opts, messages.WithBaseURL(o.baseURL))
 		}
-		return anthropic.New(opts...), nil
+		return messages.New(opts...), nil
 	}
 	return nil, fmt.Errorf("unknown provider %q", o.provider)
 }
@@ -178,7 +179,7 @@ func run(o options, prompt string) error {
 
 	id := o.sessionID
 	if id == "" {
-		sess, err := store.Create(ctx, session.Info{Provider: o.provider, Model: o.model})
+		sess, err := store.Create(ctx, session.Info{Provider: llm.NormalizeProvider(o.provider), Model: o.model})
 		if err != nil {
 			return err
 		}

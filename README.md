@@ -22,9 +22,12 @@ llm/                  与提供方无关的类型与接口
   tool.go             Tool、ToolCall、ToolResult、ToolChoice
   request.go          Request、Response、Usage、StopReason
   errors.go           APIError（状态码、类型、Retry-After、Retryable）
-  openai/             OpenAI Responses API 适配器（POST {baseURL}/responses）
-  chatcompletions/    OpenAI Chat Completions API 适配器（POST {baseURL}/chat/completions）
-  anthropic/          Anthropic Messages API 适配器（POST {baseURL}/v1/messages）
+  provider.go         协议 ID（openai/chat-completions、openai/responses、anthropic/messages）与旧名兼容
+  openai/
+    chatcompletions/  openai/chat-completions：Chat Completions API（POST {baseURL}/chat/completions）
+    responses/        openai/responses：Responses API（POST {baseURL}/responses）
+  anthropic/
+    messages/         anthropic/messages：Messages API（POST {baseURL}/v1/messages）
 internal/
   sse/                text/event-stream 解析器
   transport/          共享的 HTTP 请求、错误解析与流式迭代器
@@ -36,16 +39,18 @@ internal/
 ```go
 import (
 	"github.com/EvanFromDowntown/Dio/llm"
-	"github.com/EvanFromDowntown/Dio/llm/anthropic"
-	"github.com/EvanFromDowntown/Dio/llm/openai"
+	"github.com/EvanFromDowntown/Dio/llm/anthropic/messages"
+	"github.com/EvanFromDowntown/Dio/llm/openai/chatcompletions"
+	"github.com/EvanFromDowntown/Dio/llm/openai/responses"
 )
 
-var client llm.Client = openai.New(
-	openai.WithAPIKey(os.Getenv("OPENAI_API_KEY")),
-	openai.WithBaseURL("https://my-gateway.example.com/v1"), // 可选，默认 https://api.openai.com/v1
-	openai.WithHTTPClient(&http.Client{Timeout: 2 * time.Minute}),
+var client llm.Client = responses.New(
+	responses.WithAPIKey(os.Getenv("OPENAI_API_KEY")),
+	responses.WithBaseURL("https://my-gateway.example.com/v1"), // 可选，默认 https://api.openai.com/v1
+	responses.WithHTTPClient(&http.Client{Timeout: 2 * time.Minute}),
 )
-// 或者：anthropic.New(anthropic.WithAPIKey(...), anthropic.WithBaseURL("https://my-gateway.example.com"))
+// 或者：chatcompletions.New(chatcompletions.WithAPIKey(...), chatcompletions.WithBaseURL("https://my-gateway.example.com/v1"))
+// 或者：messages.New(messages.WithAPIKey(...), messages.WithBaseURL("https://my-gateway.example.com"))
 
 req := &llm.Request{
 	Model:     "gpt-5",
@@ -154,7 +159,7 @@ for ev, err := range a.Stream(ctx, msgs) {
 OPENAI_API_KEY=... go run ./examples/readfile -model gpt-5 "Summarize README.md"
 
 # 兼容 Chat Completions 协议的网关，key 从指定的环境变量读取
-DIO_API_KEY=... go run ./examples/readfile -provider chatcompletions -api-key-env DIO_API_KEY \
+DIO_API_KEY=... go run ./examples/readfile -provider openai/chat-completions -api-key-env DIO_API_KEY \
   -base-url https://gateway.example.com/v1 -model deepseek-flash "Summarize README.md"
 ```
 
@@ -202,7 +207,7 @@ echo "总结 README.md" | ./dio -model deepseek-flash
 ./dio sessions                          # 列出会话
 ```
 
-- `-provider`：`chatcompletions`（默认）、`openai`（Responses）、`anthropic`（Messages）。三者可以用同一个 `.../v1` 形式的 base URL，anthropic 会自动去掉末尾的 `/v1`。
+- `-provider`：`openai/chat-completions`（默认）、`openai/responses`、`anthropic/messages`。三者可以用同一个 `.../v1` 形式的 base URL，`anthropic/messages` 会自动去掉末尾的 `/v1`。旧名 `chatcompletions`、`openai`、`anthropic` 仍然可用（参数、`DIO_PROVIDER`、Web 设置、旧会话文件），会自动换成新 ID；新写入的会话一律记录新 ID。
 - 环境变量 `DIO_PROVIDER`、`DIO_MODEL`、`DIO_BASE_URL` 可以作为默认值，命令行参数优先。
 - 其他参数：`-root`（read_file 的只读工作目录，默认当前目录）、`-max-turns`、`-max-tokens`、`-reasoning-effort`、`-temperature`、`-show-reasoning`、`-sessions-dir`。
 - 对话中可用的命令：`/sessions`、`/new`、`/quit`（或 `/exit`）、`/help`。生成过程中按 Ctrl+C 只中断当前这一轮，历史会保留；在提示符处按 Ctrl+C 退出。

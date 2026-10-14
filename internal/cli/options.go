@@ -9,13 +9,16 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/EvanFromDowntown/Dio/llm"
 )
 
-// Providers lists the supported -provider values.
-var Providers = []string{"chatcompletions", "openai", "anthropic"}
+// Providers lists the supported -provider values. The legacy names
+// chatcompletions, openai and anthropic are still accepted.
+var Providers = llm.Providers
 
 const (
-	DefaultProvider  = "chatcompletions"
+	DefaultProvider  = llm.ProviderChatCompletions
 	DefaultAPIKeyEnv = "DIO_API_KEY"
 	DefaultAddr      = "127.0.0.1:8080"
 )
@@ -120,7 +123,8 @@ func Parse(args []string, getenv func(string) string, usage io.Writer) (*Options
 	if o.Command != "" && o.Prompt != "" {
 		return nil, fmt.Errorf("%s 子命令不接受参数：%q", o.Command, o.Prompt)
 	}
-	if !contains(Providers, o.Provider) {
+	o.Provider = llm.NormalizeProvider(o.Provider)
+	if !llm.IsProvider(o.Provider) {
 		return nil, fmt.Errorf("未知的 provider %q，可选：%s", o.Provider, strings.Join(Providers, "、"))
 	}
 	switch o.ReasoningEffort {

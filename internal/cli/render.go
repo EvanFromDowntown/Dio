@@ -186,7 +186,7 @@ func WriteSessions(w io.Writer, infos []session.Info, current string) error {
 		}
 		model := s.Model
 		if s.Provider != "" {
-			model = s.Provider + "/" + s.Model
+			model = s.Provider + " · " + s.Model
 		}
 		fmt.Fprintf(tw, "%s %s\t%s\t%d\t%d/%d\t%s\t%s\n", mark, s.ID, s.UpdatedAt.Local().Format(time.DateTime),
 			s.MessageCount, s.Usage.InputTokens, s.Usage.OutputTokens, model, truncate(s.Title, 40))
