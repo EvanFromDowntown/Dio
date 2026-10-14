@@ -60,10 +60,15 @@ type doneEvent struct {
 }
 
 // streamRun forwards a run's events; title is consulted once at the end so
-// the page can show the title derived from the first message.
-func streamRun(ctx context.Context, sse *sseWriter, events iter.Seq2[agent.Event, error], sessionID string, title func() string) {
+// the page can show the title derived from the first message. A failed
+// write means the browser is gone, so the run is canceled via cancel.
+func streamRun(sse *sseWriter, cancel context.CancelFunc, events iter.Seq2[agent.Event, error], sessionID string, title func() string) {
 	toolNames := map[string]string{}
+	gone := false
 	for ev, err := range events {
+		if gone && ev.Type != agent.EventDone {
+			continue
+		}
 		var werr error
 		switch ev.Type {
 		case agent.EventModel:
@@ -95,10 +100,9 @@ func streamRun(ctx context.Context, sse *sseWriter, events iter.Seq2[agent.Event
 			sse.send("done", done)
 			return
 		}
-		if werr != nil || ctx.Err() != nil {
-			// The browser went away; the run's context is canceled and the
-			// remaining events only drain the loop.
-			continue
+		if werr != nil && !gone {
+			gone = true
+			cancel()
 		}
 	}
 }

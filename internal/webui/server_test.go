@@ -302,8 +302,9 @@ func TestStopAndConflict(t *testing.T) {
 }
 
 func TestBrowserDisconnectCancelsRun(t *testing.T) {
-	canceled := make(chan struct{})
+	started, canceled := make(chan struct{}), make(chan struct{})
 	e := newEnv(t, testKey, func(ctx context.Context, _ *llm.Request) (*llm.Response, error) {
+		close(started)
 		<-ctx.Done()
 		close(canceled)
 		return nil, ctx.Err()
@@ -316,6 +317,7 @@ func TestBrowserDisconnectCancelsRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	<-started
 	cancel()
 	resp.Body.Close()
 	select {

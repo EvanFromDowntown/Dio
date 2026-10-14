@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -238,10 +239,14 @@ type messageRequest struct {
 // detected before the run starts are plain JSON responses.
 func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 	var req messageRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
+	body := http.MaxBytesReader(w, r.Body, 4<<20)
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "请求格式错误："+err.Error())
 		return
 	}
+	// Reading to EOF lets net/http watch the connection, so the request
+	// context (and the run) is canceled when the browser goes away.
+	io.Copy(io.Discard, body)
 	req.Text = strings.TrimSpace(req.Text)
 	if req.Text == "" {
 		writeError(w, http.StatusBadRequest, "消息不能为空")
@@ -303,7 +308,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		return ""
 	}
-	streamRun(ctx, sse, run.runner.Stream(ctx, sess.ID, llm.UserText(req.Text)), sess.ID, title)
+	streamRun(sse, cancel, run.runner.Stream(ctx, sess.ID, llm.UserText(req.Text)), sess.ID, title)
 	s.logger.Info("run finished", "session", sess.ID)
 }
 
