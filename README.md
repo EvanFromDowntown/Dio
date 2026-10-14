@@ -10,6 +10,8 @@ Dio 是一个用 Go 编写的 agent，仅依赖标准库。目前包含：
 ```
 agent/                Agent loop、Plugin / Host 接口与可选能力接口、Decision
 session/              会话持久化：Store 接口、JSONL 文件存储、内存存储、Recorder 插件、Runner
+cmd/dio/              交互式命令行客户端 dio
+internal/cli/         dio 的参数解析、斜杠命令、事件渲染、REPL 与单次问答
 tool/                 Tool 接口、tool.Func 适配器、Registry
 plugins/readfile/     示例插件：只读 read_file 工具 + 记录日志的 hook
 examples/readfile/    使用示例插件的命令行 demo
@@ -181,6 +183,29 @@ go run ./examples/readfile -model gpt-5 "Remember: the code is 4729."   # 默认
 go run ./examples/readfile -model gpt-5 -session <id> "What was the code?"
 go run ./examples/readfile sessions                                     # 列出 session
 ```
+
+## dio 客户端
+
+```bash
+go build -o dio ./cmd/dio
+export DIO_API_KEY=...          # key 只从环境变量读取，变量名可用 -api-key-env 修改
+
+# 交互模式（多轮对话都记入同一个会话，自动保存到 ~/.dio/sessions）
+./dio -base-url https://gateway.example.com/v1 -model deepseek-flash -root ~/notes
+
+# 单次问答：参数或管道（标准输入不是终端时读取全部输入作为一条消息）
+./dio -model deepseek-flash "总结 README.md"
+echo "总结 README.md" | ./dio -model deepseek-flash
+
+./dio -session 20261014-101500-a1b2c3   # 恢复会话；未显式指定时沿用会话的 provider/model/base URL
+./dio sessions                          # 列出会话
+```
+
+- `-provider`：`chatcompletions`（默认）、`openai`（Responses）、`anthropic`（Messages）。三者可以用同一个 `.../v1` 形式的 base URL，anthropic 会自动去掉末尾的 `/v1`。
+- 环境变量 `DIO_PROVIDER`、`DIO_MODEL`、`DIO_BASE_URL` 可以作为默认值，命令行参数优先。
+- 其他参数：`-root`（read_file 的只读工作目录，默认当前目录）、`-max-turns`、`-max-tokens`、`-reasoning-effort`、`-temperature`、`-show-reasoning`、`-sessions-dir`。
+- 对话中可用的命令：`/sessions`、`/new`、`/quit`（或 `/exit`）、`/help`。生成过程中按 Ctrl+C 只中断当前这一轮，历史会保留；在提示符处按 Ctrl+C 退出。
+- 回答输出到 stdout；工具调用以 `[工具] read_file(path=notes.txt)`、`[结果] …` / `[出错] …` 的形式显示，单次模式下这些状态行输出到 stderr。
 
 ## 开发
 
