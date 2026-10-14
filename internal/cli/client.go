@@ -17,22 +17,27 @@ func NewClient(opts *Options, getenv func(string) string) (llm.Client, error) {
 	if key == "" {
 		return nil, fmt.Errorf("环境变量 %s 未设置：请先 export %s=<API key>，或用 -api-key-env 指定其他变量", opts.APIKeyEnv, opts.APIKeyEnv)
 	}
-	base := strings.TrimRight(opts.BaseURL, "/")
-	switch opts.Provider {
+	return NewProviderClient(opts.Provider, opts.BaseURL, key)
+}
+
+// NewProviderClient builds a client for one of Providers.
+func NewProviderClient(provider, baseURL, apiKey string) (llm.Client, error) {
+	base := strings.TrimRight(baseURL, "/")
+	switch provider {
 	case "chatcompletions":
-		o := []chatcompletions.Option{chatcompletions.WithAPIKey(key)}
+		o := []chatcompletions.Option{chatcompletions.WithAPIKey(apiKey)}
 		if base != "" {
 			o = append(o, chatcompletions.WithBaseURL(base))
 		}
 		return chatcompletions.New(o...), nil
 	case "openai":
-		o := []openai.Option{openai.WithAPIKey(key)}
+		o := []openai.Option{openai.WithAPIKey(apiKey)}
 		if base != "" {
 			o = append(o, openai.WithBaseURL(base))
 		}
 		return openai.New(o...), nil
 	case "anthropic":
-		o := []anthropic.Option{anthropic.WithAPIKey(key)}
+		o := []anthropic.Option{anthropic.WithAPIKey(apiKey)}
 		if base != "" {
 			// The adapter appends /v1/messages, so accept the same ".../v1"
 			// base URL the OpenAI-style providers use.
@@ -40,5 +45,5 @@ func NewClient(opts *Options, getenv func(string) string) (llm.Client, error) {
 		}
 		return anthropic.New(o...), nil
 	}
-	return nil, fmt.Errorf("未知的 provider %q", opts.Provider)
+	return nil, fmt.Errorf("未知的 provider %q", provider)
 }

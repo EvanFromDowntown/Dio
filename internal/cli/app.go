@@ -16,7 +16,7 @@ import (
 	"github.com/EvanFromDowntown/Dio/session"
 )
 
-const systemPrompt = "You are Dio, a concise and helpful assistant. Answer in the user's language."
+const SystemPrompt = "You are Dio, a concise and helpful assistant. Answer in the user's language."
 
 // App is one dio process: an agent bound to a session store, and the
 // session currently being chatted in.
@@ -56,7 +56,7 @@ func NewApp(ctx context.Context, opts *Options, client llm.Client, store session
 	cfg := agent.Config{
 		Client:      client,
 		Model:       opts.Model,
-		System:      systemPrompt,
+		System:      SystemPrompt,
 		MaxTurns:    opts.MaxTurns,
 		MaxTokens:   opts.MaxTokens,
 		Temperature: opts.Temperature,
