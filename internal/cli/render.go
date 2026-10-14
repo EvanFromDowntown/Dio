@@ -65,11 +65,11 @@ func (r *Renderer) Event(ev agent.Event) {
 		r.Finish()
 		res := ev.ToolResult
 		if res.IsError {
-			r.info.write(fmt.Sprintf("[出错] %s：%s\n", ev.ToolCall.Name, preview(res.Content, 120)))
+			r.info.write(fmt.Sprintf("[出错] %s：%s\n", ev.ToolCall.Name, Preview(res.Content, 120)))
 			return
 		}
 		line := fmt.Sprintf("[结果] %s：%d 字节", ev.ToolCall.Name, len(res.Content))
-		if p := preview(res.Content, 60); p != "" {
+		if p := Preview(res.Content, 60); p != "" {
 			line += " · " + p
 		}
 		r.info.write(line + "\n")
@@ -138,8 +138,8 @@ func SummarizeArgs(args json.RawMessage, max int) string {
 	return truncate(strings.Join(parts, ", "), max)
 }
 
-// preview returns the first non-empty line of s, truncated.
-func preview(s string, max int) string {
+// Preview returns the first non-empty line of s, truncated.
+func Preview(s string, max int) string {
 	for _, line := range strings.Split(s, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			return truncate(line, max)

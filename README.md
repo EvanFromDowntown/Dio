@@ -12,6 +12,7 @@ agent/                Agent loop、Plugin / Host 接口与可选能力接口、D
 session/              会话持久化：Store 接口、JSONL 文件存储、内存存储、Recorder 插件、Runner
 cmd/dio/              交互式命令行客户端 dio
 internal/cli/         dio 的参数解析、斜杠命令、事件渲染、REPL 与单次问答
+internal/webui/       dio ui：本地 HTTP/SSE API 与嵌入的单页前端（index.html）
 tool/                 Tool 接口、tool.Func 适配器、Registry
 plugins/readfile/     示例插件：只读 read_file 工具 + 记录日志的 hook
 examples/readfile/    使用示例插件的命令行 demo
@@ -206,6 +207,32 @@ echo "总结 README.md" | ./dio -model deepseek-flash
 - 其他参数：`-root`（read_file 的只读工作目录，默认当前目录）、`-max-turns`、`-max-tokens`、`-reasoning-effort`、`-temperature`、`-show-reasoning`、`-sessions-dir`。
 - 对话中可用的命令：`/sessions`、`/new`、`/quit`（或 `/exit`）、`/help`。生成过程中按 Ctrl+C 只中断当前这一轮，历史会保留；在提示符处按 Ctrl+C 退出。
 - 回答输出到 stdout；工具调用以 `[工具] read_file(path=notes.txt)`、`[结果] …` / `[出错] …` 的形式显示，单次模式下这些状态行输出到 stderr。
+
+## Web 界面
+
+```bash
+export DIO_API_KEY=...   # 可选：也可以在界面“设置”里填写
+./dio ui -base-url https://gateway.example.com/v1 -model deepseek-flash -root ~/notes
+# 打开 http://127.0.0.1:8080/
+```
+
+- 左侧是会话列表（标题、更新时间、消息数、token 用量、ID），可以新建会话，也可以点选已有会话查看历史并继续聊；会话仍保存在 `~/.dio/sessions`，和 CLI 共用。
+- 回答逐字流式显示，推理过程折叠显示，工具调用和结果以 `工具 read_file(path=…)`、`结果 … 字节 · 预览` / `出错 …` 的形式显示；生成中可以点“停止”，已生成的内容会保留。
+- “设置”里可以修改协议、模型、Base URL、API key、工作目录、最大轮数、最大 tokens、推理强度和 temperature。启动参数和 `DIO_*` 环境变量作为初始值。
+- API key 只保存在 dio 进程内存中，不写入磁盘，接口也不会返回它。
+- 只能监听本机地址（127.0.0.1、::1、localhost）；服务端会拒绝 Host 不是本机的请求（防 DNS rebinding）和跨站的写请求。
+
+HTTP API（前端使用的同一套）：
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `GET /api/config`、`PUT /api/config` | 读取 / 修改设置（`api_key` 非空时替换，`clear_api_key` 清除） |
+| `GET /api/sessions`、`POST /api/sessions` | 列出 / 新建会话 |
+| `GET /api/sessions/{id}` | 会话详情与可展示的历史 |
+| `POST /api/sessions/{id}/messages` | 发送消息，以 SSE 返回 `text`、`reasoning`、`item`（工具行）、`message_end`、`done` 事件 |
+| `POST /api/sessions/{id}/cancel` | 停止正在生成的回答 |
+
+写请求需要 `Content-Type: application/json`。
 
 ## 开发
 

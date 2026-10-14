@@ -17,11 +17,14 @@ var Providers = []string{"chatcompletions", "openai", "anthropic"}
 const (
 	DefaultProvider  = "chatcompletions"
 	DefaultAPIKeyEnv = "DIO_API_KEY"
+	DefaultAddr      = "127.0.0.1:8080"
 )
 
 type Options struct {
-	// Command is "sessions" for `dio sessions`, empty for chatting.
+	// Command is "sessions" or "ui" for those subcommands, empty for chatting.
 	Command string
+	// Addr is the listen address for `dio ui`.
+	Addr string
 
 	Provider  string
 	Model     string
@@ -61,8 +64,8 @@ var envDefaults = map[string]string{
 // precedence over DIO_PROVIDER, DIO_MODEL and DIO_BASE_URL.
 func Parse(args []string, getenv func(string) string, usage io.Writer) (*Options, error) {
 	o := &Options{explicit: map[string]bool{}}
-	if len(args) > 0 && args[0] == "sessions" {
-		o.Command = "sessions"
+	if len(args) > 0 && (args[0] == "sessions" || args[0] == "ui") {
+		o.Command = args[0]
 		args = args[1:]
 	}
 
@@ -87,11 +90,13 @@ func Parse(args []string, getenv func(string) string, usage io.Writer) (*Options
 		return nil
 	})
 	fs.BoolVar(&o.ShowReasoning, "show-reasoning", false, "显示模型的推理过程")
+	fs.StringVar(&o.Addr, "addr", DefaultAddr, "dio ui 的监听地址")
 	fs.Usage = func() {
 		fmt.Fprint(usage, `用法：
   dio [参数]            交互模式（标准输入不是终端时，读取全部输入作为一条消息，回答后退出）
   dio [参数] "问题"      单次问答
   dio sessions          列出会话
+  dio ui [参数]          启动本地 Web 界面（默认 http://127.0.0.1:8080）
 
 参数：
 `)
@@ -112,8 +117,8 @@ func Parse(args []string, getenv func(string) string, usage io.Writer) (*Options
 	}
 	o.Prompt = strings.TrimSpace(strings.Join(fs.Args(), " "))
 
-	if o.Command == "sessions" && o.Prompt != "" {
-		return nil, fmt.Errorf("sessions 子命令不接受参数：%q", o.Prompt)
+	if o.Command != "" && o.Prompt != "" {
+		return nil, fmt.Errorf("%s 子命令不接受参数：%q", o.Command, o.Prompt)
 	}
 	if !contains(Providers, o.Provider) {
 		return nil, fmt.Errorf("未知的 provider %q，可选：%s", o.Provider, strings.Join(Providers, "、"))

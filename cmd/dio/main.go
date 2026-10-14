@@ -5,6 +5,7 @@
 //	echo "总结 README.md" | dio -model deepseek-flash
 //	dio -session 20261014-101500-a1b2c3
 //	dio sessions
+//	dio ui -addr 127.0.0.1:8080
 package main
 
 import (
@@ -56,6 +57,9 @@ func run() int {
 			return 1
 		}
 		return 0
+	}
+	if opts.Command == "ui" {
+		return serveUI(opts, store)
 	}
 
 	if err := cli.ApplySessionDefaults(ctx, opts, store); err != nil {
