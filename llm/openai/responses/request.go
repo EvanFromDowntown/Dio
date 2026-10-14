@@ -1,4 +1,4 @@
-package openai
+package responses
 
 import (
 	"encoding/json"
@@ -174,7 +174,7 @@ func encodeInput(msgs []llm.Message) ([]any, error) {
 				})
 			case llm.ContentReasoning:
 				r := b.Reasoning
-				if r == nil || r.Provider != ProviderName || r.ID == "" {
+				if r == nil || llm.NormalizeProvider(r.Provider) != ProviderName || r.ID == "" {
 					continue
 				}
 				flush()

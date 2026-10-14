@@ -89,7 +89,7 @@ func TestREPLMultiTurnAndCommands(t *testing.T) {
 	}
 	out := h.out.String()
 	assertContains(t, "output", out,
-		"Dio · chatcompletions/fake-model",
+		"Dio · openai/chat-completions · fake-model",
 		"你> 好的，记住了。\n",
 		"未知命令 /bogus",
 		"[工具] read_file(path=notes.txt)\n[结果] read_file：46 字节",
@@ -126,14 +126,14 @@ func TestREPLMultiTurnAndCommands(t *testing.T) {
 
 func TestResumeSession(t *testing.T) {
 	store := session.NewMemoryStore()
-	h := newHarness(t, store, []string{"-provider", "openai", "-model", "orig-model", "-base-url", "https://gw/v1"}, answer("记住了。"))
+	h := newHarness(t, store, []string{"-provider", "openai/responses", "-model", "orig-model", "-base-url", "https://gw/v1"}, answer("记住了。"))
 	if err := h.app.OneShot(context.Background(), nil, "记住 4729"); err != nil {
 		t.Fatal(err)
 	}
 	id := h.app.SessionID()
 
 	resumed := newHarness(t, store, []string{"-session", id}, answer("是 4729。")).interactive()
-	if resumed.opts.Provider != "openai" || resumed.opts.Model != "orig-model" || resumed.opts.BaseURL != "https://gw/v1" {
+	if resumed.opts.Provider != "openai/responses" || resumed.opts.Model != "orig-model" || resumed.opts.BaseURL != "https://gw/v1" {
 		t.Errorf("session defaults not applied: %+v", resumed.opts)
 	}
 	if err := resumed.app.REPL(context.Background(), strings.NewReader("密码？\n"), nil); err != nil {
@@ -149,7 +149,7 @@ func TestResumeSession(t *testing.T) {
 	}
 
 	explicit := newHarness(t, store, []string{"-session", id, "-provider", "anthropic"})
-	if explicit.opts.Provider != "anthropic" || explicit.opts.Model != "orig-model" {
+	if explicit.opts.Provider != "anthropic/messages" || explicit.opts.Model != "orig-model" {
 		t.Errorf("explicit flags must win: %+v", explicit.opts)
 	}
 

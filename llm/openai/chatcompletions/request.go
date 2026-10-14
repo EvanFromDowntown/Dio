@@ -197,7 +197,7 @@ func (c *Client) encodeAssistant(m llm.Message) (apiMessage, error) {
 				Function: functionCall{Name: b.ToolCall.Name, Arguments: args},
 			})
 		case llm.ContentReasoning:
-			if r := b.Reasoning; c.replayReasoning && r != nil && r.Provider == ProviderName {
+			if r := b.Reasoning; c.replayReasoning && r != nil && llm.NormalizeProvider(r.Provider) == ProviderName {
 				reasoning.WriteString(r.Text)
 			}
 		default:

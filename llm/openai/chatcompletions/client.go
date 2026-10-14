@@ -18,7 +18,7 @@ const (
 	// DefaultBaseURL includes the /v1 prefix, like the openai adapter.
 	DefaultBaseURL = "https://api.openai.com/v1"
 	// ProviderName tags llm.Reasoning blocks produced by this adapter.
-	ProviderName = "chatcompletions"
+	ProviderName = llm.ProviderChatCompletions
 )
 
 type Client struct {

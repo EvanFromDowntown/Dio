@@ -1,6 +1,7 @@
 // Package llm defines a provider-agnostic interface for calling large language
-// models. Concrete providers live in sub-packages (llm/openai, llm/anthropic)
-// and translate these types to and from their wire protocols.
+// models. Concrete providers live in sub-packages (llm/openai/chatcompletions,
+// llm/openai/responses, llm/anthropic/messages) and translate these types to
+// and from their wire protocols.
 package llm
 
 import "strings"

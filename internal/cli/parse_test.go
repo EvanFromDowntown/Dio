@@ -30,10 +30,16 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Provider != "anthropic" || o.Model != "flag-model" || o.BaseURL != "https://env/v1" ||
+	if o.Provider != "anthropic/messages" || o.Model != "flag-model" || o.BaseURL != "https://env/v1" ||
 		*o.Temperature != 0.3 || o.ReasoningEffort != "low" || o.Prompt != "hello world" ||
 		!o.Explicit("provider") || !o.Explicit("model") {
 		t.Errorf("env and flags = %+v", o)
+	}
+
+	for legacy, want := range map[string]string{"chatcompletions": "openai/chat-completions", "openai": "openai/responses", "anthropic": "anthropic/messages", "openai/responses": "openai/responses"} {
+		if o, err := Parse([]string{"-provider", legacy}, noEnv, io.Discard); err != nil || o.Provider != want {
+			t.Errorf("-provider %s = %v, %v", legacy, o, err)
+		}
 	}
 
 	o, err = Parse([]string{"sessions", "-sessions-dir", "/tmp/x"}, getenv, io.Discard)
@@ -163,11 +169,11 @@ func TestFormatUsageAndSessions(t *testing.T) {
 	}
 	buf.Reset()
 	WriteSessions(&buf, []session.Info{
-		{ID: "b", Provider: "openai", Model: "m", MessageCount: 4, Usage: llm.Usage{InputTokens: 10, OutputTokens: 2}, Title: "第二个"},
+		{ID: "b", Provider: "openai/responses", Model: "m", MessageCount: 4, Usage: llm.Usage{InputTokens: 10, OutputTokens: 2}, Title: "第二个"},
 		{ID: "a", Model: "m", Title: strings.Repeat("长", 50)},
 	}, "b")
 	out := buf.String()
-	for _, want := range []string{"* b", "10/2", "openai/m", strings.Repeat("长", 40) + "…"} {
+	for _, want := range []string{"* b", "10/2", "openai/responses · m", strings.Repeat("长", 40) + "…"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table missing %q:\n%s", want, out)
 		}

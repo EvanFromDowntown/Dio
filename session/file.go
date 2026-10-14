@@ -72,6 +72,7 @@ func (s *FileStore) Create(_ context.Context, info Info) (*Session, error) {
 		return nil, err
 	}
 	info.CreatedAt, info.UpdatedAt = now, now
+	info.Provider = llm.NormalizeProvider(info.Provider)
 	info.MessageCount, info.Usage = 0, llm.Usage{}
 	data, err := encodeLines([]record{headerRecord(info)})
 	if err != nil {

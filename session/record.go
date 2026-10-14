@@ -43,7 +43,7 @@ const (
 func headerRecord(info Info) record {
 	return record{Type: recSession, At: info.CreatedAt, Session: &header{
 		Version: formatVersion, ID: info.ID, Title: info.Title,
-		Provider: info.Provider, Model: info.Model, Metadata: info.Metadata,
+		Provider: llm.NormalizeProvider(info.Provider), Model: info.Model, Metadata: info.Metadata,
 	}}
 }
 
@@ -93,7 +93,7 @@ func decodeSession(data []byte) (*Session, error) {
 			}
 			h := r.Session
 			s = &Session{Info: Info{
-				ID: h.ID, Title: h.Title, Provider: h.Provider, Model: h.Model, Metadata: h.Metadata,
+				ID: h.ID, Title: h.Title, Provider: llm.NormalizeProvider(h.Provider), Model: h.Model, Metadata: h.Metadata,
 				CreatedAt: r.At, UpdatedAt: r.At,
 			}, Messages: []llm.Message{}}
 			continue

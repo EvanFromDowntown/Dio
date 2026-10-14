@@ -1,4 +1,4 @@
-package anthropic
+package messages
 
 import (
 	"context"
@@ -395,5 +395,25 @@ func TestStreamContextCancel(t *testing.T) {
 	}
 	if !errors.Is(s.Err(), context.Canceled) {
 		t.Errorf("err = %v", s.Err())
+	}
+}
+
+func TestLegacyReasoningProviderIsReplayed(t *testing.T) {
+	if ProviderName != "anthropic/messages" {
+		t.Fatalf("ProviderName = %q", ProviderName)
+	}
+	body, err := encodeRequest(&llm.Request{Model: "m", Messages: []llm.Message{
+		llm.UserText("q"),
+		{Role: llm.RoleAssistant, Content: []llm.ContentBlock{
+			{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{Provider: "anthropic", Text: "legacy", Signature: "sig"}},
+			{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{Provider: "openai", Text: "foreign"}},
+			llm.TextBlock("a"),
+		}},
+	}}, 100, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"thinking":"legacy"`) || strings.Contains(string(body), "foreign") {
+		t.Errorf("body = %s", body)
 	}
 }

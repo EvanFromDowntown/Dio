@@ -44,12 +44,16 @@ func TestConfig(t *testing.T) {
 	}
 	var cfg configView
 	e.do("GET", "/api/config", nil, &cfg)
-	if !cfg.HasAPIKey || cfg.Provider != "chatcompletions" || cfg.Model != "fake-model" || cfg.Root != e.root ||
+	if !cfg.HasAPIKey || cfg.Provider != "openai/chat-completions" || cfg.Model != "fake-model" || cfg.Root != e.root ||
 		cfg.Temperature != nil || len(cfg.Providers) != 3 {
 		t.Errorf("config = %+v", cfg)
 	}
 	if strings.Contains(raw(), testKey) {
 		t.Fatal("config response leaks the API key")
+	}
+	if !reflect.DeepEqual(cfg.Providers, []string{"openai/chat-completions", "openai/responses", "anthropic/messages"}) ||
+		strings.Contains(raw(), `"chatcompletions"`) {
+		t.Errorf("providers = %v\n%s", cfg.Providers, raw())
 	}
 
 	update := map[string]any{
@@ -59,7 +63,7 @@ func TestConfig(t *testing.T) {
 	if code := e.do("PUT", "/api/config", update, &cfg); code != 200 {
 		t.Fatalf("put: %d", code)
 	}
-	if cfg.Provider != "anthropic" || cfg.MaxTokens != 222 || *cfg.Temperature != 0.7 || cfg.ReasoningEffort != "high" || !cfg.HasAPIKey {
+	if cfg.Provider != "anthropic/messages" || cfg.MaxTokens != 222 || *cfg.Temperature != 0.7 || cfg.ReasoningEffort != "high" || !cfg.HasAPIKey {
 		t.Errorf("updated = %+v", cfg)
 	}
 	if strings.Contains(raw(), "sk-new-key") {
@@ -102,7 +106,7 @@ func TestConfig(t *testing.T) {
 func TestChatFlowWithToolsAndResume(t *testing.T) {
 	e := newEnv(t, testKey, readFile("notes.txt"), answer("代号是 Falcon-7。"), answer("你的停车位是 B2-117。"))
 	sess := e.createSession()
-	if sess.Provider != "chatcompletions" || sess.Model != "fake-model" {
+	if sess.Provider != "openai/chat-completions" || sess.Model != "fake-model" {
 		t.Errorf("created = %+v", sess)
 	}
 
@@ -148,7 +152,7 @@ func TestChatFlowWithToolsAndResume(t *testing.T) {
 		t.Errorf("request = %+v", req)
 	}
 	e.factory.mu.Lock()
-	if e.factory.calls[0] != "chatcompletions|https://gw/v1|"+testKey {
+	if e.factory.calls[0] != "openai/chat-completions|https://gw/v1|"+testKey {
 		t.Errorf("factory = %v", e.factory.calls)
 	}
 	e.factory.mu.Unlock()
@@ -360,7 +364,7 @@ func TestNewValidatesSettings(t *testing.T) {
 		t.Error("invalid provider accepted")
 	}
 	s, err := New(nil, Settings{MaxTurns: 1, MaxTokens: 1}, "")
-	if err != nil || s.settings.Provider != "chatcompletions" || s.settings.Root == "" {
+	if err != nil || s.settings.Provider != "openai/chat-completions" || s.settings.Root == "" {
 		t.Errorf("defaults: %+v %v", s, err)
 	}
 }

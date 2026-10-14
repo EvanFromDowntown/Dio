@@ -88,8 +88,8 @@ func ApplySessionDefaults(ctx context.Context, opts *Options, store session.Stor
 		}
 		return err
 	}
-	if !opts.Explicit("provider") && contains(Providers, sess.Provider) {
-		opts.Provider = sess.Provider
+	if !opts.Explicit("provider") && llm.IsProvider(sess.Provider) {
+		opts.Provider = llm.NormalizeProvider(sess.Provider)
 	}
 	if !opts.Explicit("model") && sess.Model != "" {
 		opts.Model = sess.Model
@@ -186,7 +186,7 @@ func (a *App) OneShot(ctx context.Context, in io.Reader, prompt string) error {
 // REPL reads lines from in until /quit, EOF or an interrupt at the prompt.
 // An interrupt while a message is being answered cancels only that turn.
 func (a *App) REPL(ctx context.Context, in io.Reader, interrupts <-chan os.Signal) error {
-	fmt.Fprintf(a.Out, "Dio · %s/%s · 工作目录 %s\n", a.opts.Provider, a.opts.Model, a.opts.Root)
+	fmt.Fprintf(a.Out, "Dio · %s · %s · 工作目录 %s\n", a.opts.Provider, a.opts.Model, a.opts.Root)
 	if a.resumed != nil {
 		fmt.Fprintf(a.Out, "已恢复会话 %s（%d 条消息）：%s\n", a.resumed.ID, a.resumed.MessageCount, a.resumed.Title)
 	}

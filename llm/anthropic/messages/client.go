@@ -1,6 +1,6 @@
-// Package anthropic implements llm.Client over the Anthropic Messages API
+// Package messages implements llm.Client over the Anthropic Messages API
 // (POST {baseURL}/v1/messages).
-package anthropic
+package messages
 
 import (
 	"context"
@@ -20,7 +20,7 @@ const (
 	APIVersion       = "2023-06-01"
 	DefaultMaxTokens = 4096
 	// ProviderName tags llm.Reasoning blocks produced by this adapter.
-	ProviderName = "anthropic"
+	ProviderName = llm.ProviderMessages
 )
 
 type Client struct {

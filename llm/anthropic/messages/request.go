@@ -1,4 +1,4 @@
-package anthropic
+package messages
 
 import (
 	"encoding/json"
@@ -184,7 +184,7 @@ func encodeMessage(m llm.Message) (apiMessage, error) {
 			})
 		case llm.ContentReasoning:
 			r := b.Reasoning
-			if r == nil || r.Provider != ProviderName {
+			if r == nil || llm.NormalizeProvider(r.Provider) != ProviderName {
 				continue
 			}
 			if r.Encrypted != "" && r.Signature == "" {

@@ -130,7 +130,7 @@ func newEnv(t *testing.T, apiKey string, steps ...step) *env {
 		e.factory.mu.Unlock()
 		return e.client, nil
 	}
-	settings := Settings{Provider: "chatcompletions", Model: "fake-model", BaseURL: "https://gw/v1", Root: e.root, MaxTurns: 5, MaxTokens: 1000}
+	settings := Settings{Provider: "openai/chat-completions", Model: "fake-model", BaseURL: "https://gw/v1", Root: e.root, MaxTurns: 5, MaxTokens: 1000}
 	var err error
 	e.srv, err = New(e.store, settings, apiKey, WithClientFactory(factory))
 	if err != nil {

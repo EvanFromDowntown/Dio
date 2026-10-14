@@ -392,3 +392,32 @@ func TestStreamErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestLegacyReasoningProviderIsReplayed(t *testing.T) {
+	if ProviderName != "openai/chat-completions" {
+		t.Fatalf("ProviderName = %q", ProviderName)
+	}
+	body, err := New().encodeRequest(&llm.Request{Model: "m", Messages: []llm.Message{
+		llm.UserText("q"),
+		{Role: llm.RoleAssistant, Content: []llm.ContentBlock{
+			{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{Provider: "chatcompletions", Text: "legacy"}},
+			{Type: llm.ContentReasoning, Reasoning: &llm.Reasoning{Provider: "openai", Text: "foreign"}},
+			llm.TextBlock("a"),
+		}},
+	}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"reasoning_content":"legacy"`) || strings.Contains(string(body), "foreign") {
+		t.Errorf("body = %s", body)
+	}
+}
+
+func TestErrorProviderField(t *testing.T) {
+	srv, _ := testutil.Server(t, 500, "application/json", `{"error":{"message":"x"}}`)
+	_, err := newClient(srv).Generate(context.Background(), simpleRequest())
+	var apiErr *llm.APIError
+	if !errors.As(err, &apiErr) || apiErr.Provider != "openai/chat-completions" || !strings.HasPrefix(err.Error(), "openai/chat-completions: HTTP 500") {
+		t.Errorf("err = %v", err)
+	}
+}

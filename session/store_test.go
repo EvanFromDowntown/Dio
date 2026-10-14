@@ -113,7 +113,7 @@ func TestStoreLifecycle(t *testing.T) {
 			}
 			wantUsage := llm.Usage{InputTokens: 15, OutputTokens: 3, CacheReadTokens: 4, ReasoningTokens: 1}
 			if got.Usage != wantUsage || got.Title != "weather" || got.MessageCount != 4 ||
-				got.Provider != "chatcompletions" || got.Model != "deepseek-flash" || got.Metadata["cwd"] != "/tmp" ||
+				got.Provider != "openai/chat-completions" || got.Model != "deepseek-flash" || got.Metadata["cwd"] != "/tmp" ||
 				!got.CreatedAt.Equal(created.CreatedAt) || !got.UpdatedAt.After(got.CreatedAt) {
 				t.Errorf("info = %+v", got.Info)
 			}
@@ -250,6 +250,51 @@ func TestFileStoreCorruption(t *testing.T) {
 	s, id = write(t, header+`{"type":"future_record","at":"2026-10-12T00:00:03Z"}`+"\n"+msg)
 	if got, err := s.Get(ctx, id); err != nil || len(got.Messages) != 1 {
 		t.Errorf("unknown record type should be skipped: %v", err)
+	}
+}
+
+func TestLegacyProviderNames(t *testing.T) {
+	ctx := context.Background()
+	s, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := map[string]string{"old-cc": "chatcompletions", "old-resp": "openai", "old-msg": "anthropic"}
+	want := map[string]string{"old-cc": "openai/chat-completions", "old-resp": "openai/responses", "old-msg": "anthropic/messages"}
+	for id, provider := range legacy {
+		line := `{"type":"session","at":"2026-10-12T00:00:00Z","session":{"version":1,"id":"` + id + `","provider":"` + provider + `","model":"m"}}` + "\n"
+		os.WriteFile(filepath.Join(s.Dir(), id+".jsonl"), []byte(line), 0o600)
+	}
+	for id := range legacy {
+		got, err := s.Get(ctx, id)
+		if err != nil || got.Provider != want[id] {
+			t.Errorf("%s: provider = %q, err %v", id, got.Provider, err)
+		}
+		if err := s.AppendMessages(ctx, id, llm.UserText("still works")); err != nil {
+			t.Errorf("%s: append: %v", id, err)
+		}
+	}
+	list, _ := s.List(ctx)
+	for _, info := range list {
+		if info.Provider != want[info.ID] {
+			t.Errorf("list %s: provider = %q", info.ID, info.Provider)
+		}
+	}
+
+	for name, store := range stores(t) {
+		created, err := store.Create(ctx, Info{Provider: "openai"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if created.Provider != "openai/responses" {
+			t.Errorf("%s: created provider = %q", name, created.Provider)
+		}
+		if fs, ok := store.(*FileStore); ok {
+			data, _ := os.ReadFile(filepath.Join(fs.Dir(), created.ID+".jsonl"))
+			if !strings.Contains(string(data), `"provider":"openai/responses"`) || strings.Contains(string(data), `"provider":"openai"`) {
+				t.Errorf("new header not written with the new ID: %s", data)
+			}
+		}
 	}
 }
 
