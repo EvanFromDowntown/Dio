@@ -140,7 +140,7 @@ func (a *App) Ask(ctx context.Context, text string) (*agent.Result, error) {
 		}
 	}
 	r.Finish()
-	if res != nil {
+	if res != nil && res.Response != nil {
 		fmt.Fprintln(a.Info, FormatUsage(res))
 	}
 	if err != nil {

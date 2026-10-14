@@ -74,6 +74,9 @@ func TestOneShotErrors(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 	assertContains(t, "info", h.info.String(), "出错：", "dio -session "+h.app.SessionID())
+	if strings.Contains(h.info.String(), "次模型调用") {
+		t.Errorf("usage footer printed although no model call succeeded:\n%s", h.info.String())
+	}
 }
 
 func TestREPLMultiTurnAndCommands(t *testing.T) {
