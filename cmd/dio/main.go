@@ -58,6 +58,9 @@ func run() int {
 		}
 		return 0
 	}
+	if opts.Command == "ui" {
+		return serveUI(opts, store)
+	}
 
 	if err := cli.ApplySessionDefaults(ctx, opts, store); err != nil {
 		fmt.Fprintln(os.Stderr, "错误：", err)
